@@ -1,7 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import styles from "./App.module.css";
-import { FiPaperclip, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { Paperclip, ChevronLeft, ChevronRight } from "lucide-react";
 
 function App() {
   const [file, setFile] = useState(null);
@@ -9,6 +9,8 @@ function App() {
   const [chat, setChat] = useState([]);
   const [previewFileName, setPreviewFileName] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+
   const handleSend = async () => {
     const hasFile = !!file;
     const hasQuestion = question.trim() !== "";
@@ -17,15 +19,18 @@ function App() {
       return alert("Type a message or attach a file!");
     }
 
+    setIsLoading(true);
+
     if (hasFile) {
       const formData = new FormData();
       formData.append("file", file);
+      const currentFileName = previewFileName; // Store it before clearing
       setFile(null);
       setPreviewFileName("");
 
       const userFileMsg = {
         type: "user",
-        text: `📎 Sent a file: ${previewFileName}`,
+        text: `📎 Sent a file: ${currentFileName}`,
       };
       setChat((prev) => [...prev, userFileMsg]);
 
@@ -55,6 +60,8 @@ function App() {
         alert("Question failed!");
       }
     }
+    
+    setIsLoading(false);
   };
 
   return (
@@ -65,112 +72,120 @@ function App() {
           !isSidebarOpen ? styles.sidebarClosed : ""
         }`}
       >
-        <>
-          <div className={styles.sidebarHeader}>
-            {isSidebarOpen && <h2 className={styles.logo}>AI Assistant</h2>}
-            <button
-              className={`${styles.toggleBtn} ${
-                isSidebarOpen ? styles.sidebarIcon : styles.sidebarIconOpened
-              }`}
-              onClick={() => setIsSidebarOpen((prev) => !prev)}
-            >
-              {isSidebarOpen ? <FiChevronLeft /> : <FiChevronRight />}
-            </button>
-          </div>
-          {isSidebarOpen && (
-            <div>
-              <div className={styles.language}>🌐 English</div>
-              <div className={styles.nav}>
-                <div className={styles.navItemActive}>💬 New Chat</div>
-                <div className={styles.navItem}>📁 Documents</div>
-              </div>
-              <button className={styles.uploadBtn}>⬆️ Upload Documents</button>
+        <div className={styles.sidebarHeader}>
+          {isSidebarOpen && <h2 className={styles.logo}>AI Assistant</h2>}
+          <button
+            className={styles.toggleBtn}
+            onClick={() => setIsSidebarOpen((prev) => !prev)}
+          >
+            {isSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+          </button>
+        </div>
+        
+        {isSidebarOpen && (
+          <div className={styles.sidebarContent}>
+            <div className={styles.language}>🌐 English</div>
+            <div className={styles.nav}>
+              <div className={styles.navItemActive}>💬 New Chat</div>
+              <div className={styles.navItem}>📁 Documents</div>
             </div>
-          )}
-        </>
+            <button className={styles.uploadBtn}>⬆️ Upload Documents</button>
+          </div>
+        )}
       </div>
 
       {/* Main Chat Area */}
-      <div
-        className={`${styles.chatMain} ${
-          !isSidebarOpen ? styles.chatExpanded : ""
-        }`}
-      >
-        <div className={styles.chatContentWrapper}>
-          <div className={styles.chatHeader}>
-            <h1>AI Assistant Chat</h1>
-            <p>Ask me anything or upload documents for analysis</p>
-          </div>
+      <div className={`${styles.chatMain} ${!isSidebarOpen ? styles.chatExpanded : ""}`}>
+        {/* Header */}
+        <div className={styles.chatHeader}>
+          <h1>AI Assistant Chat</h1>
+          <p>Ask me anything or upload documents for analysis</p>
+        </div>
 
-          <div className={styles.scrollArea}>
-            <div className={styles.scrollAreaContent}>
-              {chat.map((msg, i) => (
-                <div
-                  key={i}
-                  className={
-                    msg.type === "user" ? styles.userBubble : styles.aiBubble
-                  }
-                >
-                  {msg.text}
+        {/* Chat Messages - Scrollable Area */}
+        <div className={styles.chatMessagesContainer}>
+          <div className={styles.chatMessages}>
+            {chat.map((msg, i) => (
+              <div
+                key={i}
+                className={
+                  msg.type === "user" ? styles.userBubble : styles.aiBubble
+                }
+              >
+                {msg.text}
+              </div>
+            ))}
+            
+            {isLoading && (
+              <div className={styles.aiBubble}>
+                <div className={styles.loadingDots}>
+                  <div className={styles.dot}></div>
+                  <div className={styles.dot}></div>
+                  <div className={styles.dot}></div>
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Chat Bar */}
-        <div className={styles.chatBoxWrapper}>
-          <div className={styles.chatBar}>
-            <div className={styles.chatInputWrapper}>
-              <label className={styles.attachmentIcon}>
-                <FiPaperclip size={20} />
-                <input
-                  type="file"
-                  accept=".txt,.pdf"
-                  onChange={(e) => {
-                    const selected = e.target.files[0];
-                    if (selected) {
-                      setFile(selected);
-                      setPreviewFileName(selected.name);
-                    }
-                  }}
-                  className={styles.hiddenInput}
-                />
-              </label>
+        {/* Input Area - Fixed at Bottom */}
+        <div className={styles.chatInputContainer}>
+          {/* File Preview */}
+          {previewFileName && (
+            <div className={styles.filePreview}>
+              <span>📎 {previewFileName}</span>
+              <button
+                className={styles.removeFileButton}
+                onClick={() => {
+                  setFile(null);
+                  setPreviewFileName("");
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
+          {/* Input Row */}
+          <div className={styles.chatInputWrapper}>
+            <label className={styles.attachmentIcon}>
+              <Paperclip size={20} />
               <input
-                type="text"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder="Type your message..."
-                className={styles.questionInput}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleSend();
+                type="file"
+                accept=".txt,.pdf"
+                onChange={(e) => {
+                  const selected = e.target.files[0];
+                  if (selected) {
+                    setFile(selected);
+                    setPreviewFileName(selected.name);
                   }
                 }}
+                className={styles.hiddenInput}
               />
+            </label>
 
-              <button className={styles.askButton} onClick={handleSend}>
-                Send
-              </button>
+            <input
+              type="text"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Type your message..."
+              className={styles.questionInput}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              disabled={isLoading}
+            />
 
-              {previewFileName && (
-                <div className={styles.filePreview}>
-                  📎 {previewFileName}
-                  <button
-                    className={styles.removeFileButton}
-                    onClick={() => {
-                      setFile(null);
-                      setPreviewFileName("");
-                    }}
-                  >
-                    ✖
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              className={styles.askButton}
+              onClick={handleSend}
+              disabled={isLoading}
+            >
+              {isLoading ? "..." : "Send"}
+            </button>
           </div>
         </div>
       </div>
