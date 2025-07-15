@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import styles from "./App.module.css";
 import { Paperclip, ChevronLeft, ChevronRight } from "lucide-react";
@@ -10,6 +10,16 @@ function App() {
   const [previewFileName, setPreviewFileName] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  // Auto-scroll to bottom when new messages are added
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [chat]); // Trigger scroll when chat changes
 
   const handleSend = async () => {
     const hasFile = !!file;
@@ -60,7 +70,7 @@ function App() {
         alert("Question failed!");
       }
     }
-    
+
     setIsLoading(false);
   };
 
@@ -78,10 +88,14 @@ function App() {
             className={styles.toggleBtn}
             onClick={() => setIsSidebarOpen((prev) => !prev)}
           >
-            {isSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+            {isSidebarOpen ? (
+              <ChevronLeft size={16} />
+            ) : (
+              <ChevronRight size={16} />
+            )}
           </button>
         </div>
-        
+
         {isSidebarOpen && (
           <div className={styles.sidebarContent}>
             <div className={styles.language}>🌐 English</div>
@@ -89,13 +103,17 @@ function App() {
               <div className={styles.navItemActive}>💬 New Chat</div>
               <div className={styles.navItem}>📁 Documents</div>
             </div>
-            <button className={styles.uploadBtn}>⬆️ Upload Documents</button>
+            {/* <button className={styles.uploadBtn}>⬆️ Upload Documents</button> */}
           </div>
         )}
       </div>
 
       {/* Main Chat Area */}
-      <div className={`${styles.chatMain} ${!isSidebarOpen ? styles.chatExpanded : ""}`}>
+      <div
+        className={`${styles.chatMain} ${
+          !isSidebarOpen ? styles.chatExpanded : ""
+        }`}
+      >
         {/* Header */}
         <div className={styles.chatHeader}>
           <h1>AI Assistant Chat</h1>
@@ -115,7 +133,7 @@ function App() {
                 {msg.text}
               </div>
             ))}
-            
+
             {isLoading && (
               <div className={styles.aiBubble}>
                 <div className={styles.loadingDots}>
@@ -125,6 +143,9 @@ function App() {
                 </div>
               </div>
             )}
+
+            {/* Invisible element to scroll to */}
+            <div ref={messagesEndRef} />
           </div>
         </div>
 
