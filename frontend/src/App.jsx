@@ -19,7 +19,7 @@ function App() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [chat]); // Trigger scroll when chat changes
+  }, [chat]);
 
   const handleSend = async () => {
     const hasFile = !!file;
@@ -34,13 +34,13 @@ function App() {
     if (hasFile) {
       const formData = new FormData();
       formData.append("file", file);
-      const currentFileName = previewFileName; // Store it before clearing
+      const currentFileName = previewFileName;
       setFile(null);
       setPreviewFileName("");
 
       const userFileMsg = {
         type: "user",
-        text: `📎 Sent a file: ${currentFileName}`,
+        text: `Sent a file: ${currentFileName}`,
       };
       setChat((prev) => [...prev, userFileMsg]);
 
@@ -149,12 +149,11 @@ function App() {
           </div>
         </div>
 
-        {/* Input Area - Fixed at Bottom */}
         <div className={styles.chatInputContainer}>
           {/* File Preview */}
           {previewFileName && (
             <div className={styles.filePreview}>
-              <span>📎 {previewFileName}</span>
+              <span>📄 {previewFileName}</span>
               <button
                 className={styles.removeFileButton}
                 onClick={() => {
@@ -179,6 +178,7 @@ function App() {
                   if (selected) {
                     setFile(selected);
                     setPreviewFileName(selected.name);
+                    e.target.value = null;
                   }
                 }}
                 className={styles.hiddenInput}

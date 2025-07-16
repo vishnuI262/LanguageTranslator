@@ -31,8 +31,8 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     const file = req.file;
     if (!file) return res.status(400).json({ error: "No file uploaded!" });
 
-    console.log("📁 Uploaded file:", file.originalname);
-    console.log("📄 MIME type:", file.mimetype);
+    console.log("--Uploaded file:", file.originalname);
+    console.log("--MIME type:", file.mimetype);
 
     let extractedText = "";
 
@@ -42,7 +42,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       extractedText = parsed.text.trim();
 
       if (extractedText.length < 50) {
-        console.log("⚠️ Not enough text from PDF, switching to OCR...");
+        console.log("--Not enough text from PDF, switching to OCR...");
 
         const convert = fromPath(file.path, {
           density: 300,
@@ -76,7 +76,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         console.log("Extracted text from PDF:", extractedText.slice(0, 500));
       }
     } else if (file.mimetype.startsWith("image/")) {
-      console.log("🔍 Running Tesseract OCR for image...");
+      console.log("--Running Tesseract OCR for image...");
       const processedImagePath = `uploads/processed_${file.filename}.png`;
 
       await sharp(file.path)
@@ -93,7 +93,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       });
 
       extractedText = text;
-      console.log("📝 Extracted text from image:", extractedText.slice(0, 500));
+      console.log("--Extracted text from image:", extractedText.slice(0, 500));
     } else if (file.mimetype === "text/plain") {
       extractedText = fs.readFileSync(file.path, "utf-8");
     } else {
@@ -102,7 +102,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
     const safeText = extractedText.slice(0, 4000);
 
-    console.log("🌍 Sending text to OpenAI for translation...");
+    console.log("--Sending text to OpenAI for translation...");
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -116,8 +116,8 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     });
 
     const translated = completion.choices[0].message.content;
-    console.log("✅ Translation successful!");
-    console.log("🔤 Translated Preview:", translated.slice(0, 500));
+    console.log("--Translation successful!");
+    console.log("--Translated Preview:", translated.slice(0, 500));
 
     uploadedKnowledge = translated;
 
@@ -126,14 +126,14 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       translated: translated,
     });
   } catch (error) {
-    console.error("❌ Error in /upload route:", error);
+    console.error("--Error in /upload route:", error);
     res.status(500).json({ error: "Translation failed!" });
   }
 });
 
 app.post("/ask", express.json(), async (req, res) => {
   const { question } = req.body;
-  console.log("❔ User question received:", question);
+  console.log("--User question received:", question);
 
   const contextText =
     uploadedKnowledge ||
@@ -154,14 +154,14 @@ app.post("/ask", express.json(), async (req, res) => {
     });
 
     const answer = completion.choices[0].message.content;
-    console.log("💡 Answer generated:", answer);
+    console.log("--Answer generated:", answer);
     res.json({ answer });
   } catch (error) {
-    console.error("❌ Error in /ask route:", error);
+    console.error("--Error in /ask route:", error);
     res.status(500).json({ error: "Question answering failed!" });
   }
 });
 
 app.listen(5000, () =>
-  console.log("✅ Server running on http://localhost:5000")
+  console.log("--Server running on http://localhost:5000")
 );
