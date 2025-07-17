@@ -6,10 +6,16 @@ import Tesseract from "tesseract.js";
 import OpenAI from "openai";
 import cors from "cors";
 import dotenv from "dotenv";
+dotenv.config();
+
 import sharp from "sharp";
 import { fromPath } from "pdf2pic";
 
-dotenv.config();
+import connectDB from "./db.js";
+import Chat from "./models/Chat.js";
+import Document from "./models/Document.js";
+
+connectDB();
 
 const app = express();
 app.use(cors());
@@ -22,10 +28,10 @@ const openai = new OpenAI({
 });
 
 app.get("/", (req, res) => {
-  res.send("✅ Backend is working! 🚀");
+  res.send("Backend is working!");
 });
 
-let uploadedKnowledge = "";
+// let uploadedKnowledge = "";
 
 app.post("/upload", upload.single("file"), async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
@@ -105,8 +111,16 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       return res.end();
     }
 
+    const newDoc = new Document({
+      name: file.originalname,
+      content: extractedText,
+      uploadedAt: new Date(),
+    });
+
+    await newDoc.save();
+    console.log(`Saved document "${file.originalname}" to database.`);
+
     const safeText = extractedText.slice(0, 4000);
-    uploadedKnowledge = ""; // reset before building
 
     console.log("--Starting streaming translation...");
 
@@ -125,7 +139,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     for await (const chunk of stream) {
       const content = chunk.choices?.[0]?.delta?.content;
       if (content) {
-        uploadedKnowledge += content;
         res.write(`data: ${content}\n\n`);
       }
     }
@@ -142,9 +155,9 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 app.post("/ask", express.json(), async (req, res) => {
   const { question } = req.body;
   console.log("--User question received:", question);
-
+  const allDocs = await Document.find({});
   const contextText =
-    uploadedKnowledge ||
+    allDocs.map((doc) => doc.content).join("\n") ||
     "No document has been uploaded. Answer based on general knowledge.";
 
   try {
@@ -179,12 +192,17 @@ app.post("/ask-stream", express.json(), async (req, res) => {
   res.setHeader("Connection", "keep-alive");
 
   try {
+    const allDocs = await Document.find({});
+    const contextText =
+      allDocs.map((doc) => doc.content).join("\n") ||
+      "No document has been uploaded. Answer based on general knowledge.";
+
     const stream = await openai.chat.completions.create({
       model: "gpt-4o",
       stream: true,
       messages: [
         { role: "system", content: "You're a helpful assistant..." },
-        { role: "user", content: `Document: ${uploadedKnowledge}` },
+        { role: "user", content: `Document: ${contextText}` },
         { role: "user", content: `Question: ${question}` },
       ],
     });
@@ -237,6 +255,43 @@ app.post("/generate-title", async (req, res) => {
   } catch (err) {
     console.error("Title generation failed:", err);
     res.status(500).json({ error: "Failed to generate title" });
+  }
+});
+
+// Fetch all documents
+app.get("/documents", async (req, res) => {
+  try {
+    const documents = await Document.find().sort({ uploadedAt: -1 });
+    res.json(documents);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch documents" });
+  }
+});
+
+app.post("/api/save-chat", async (req, res) => {
+  try {
+    const { messages, title } = req.body;
+
+    const newChat = new Chat({
+      title,
+      messages,
+    });
+
+    const saved = await newChat.save();
+    res.json({ success: true, chat: saved });
+  } catch (err) {
+    console.error("Failed to save chat:", err);
+    res.status(500).json({ error: "Failed to save chat" });
+  }
+});
+
+app.get("/api/chats", async (req, res) => {
+  try {
+    const chats = await Chat.find().sort({ createdAt: -1 });
+    res.json(chats);
+  } catch (err) {
+    console.error("Failed to fetch chats:", err);
+    res.status(500).json({ error: "Server Error" });
   }
 });
 

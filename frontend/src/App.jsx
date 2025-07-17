@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import axios from "axios";
 import styles from "./App.module.css";
 import { Paperclip, ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -11,8 +10,10 @@ function App() {
   const messagesEndRef = useRef(null);
   const dropdownRef = useRef(null);
 
+  const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
+  const documentsBtnRef = useRef(null);
+  const documentsPopupRef = useRef(null);
   const [currentChat, setCurrentChat] = useState([]);
-  const [chat, setChat] = [currentChat, setCurrentChat];
 
   const [conversations, setConversations] = useState([]);
   const [previewFileName, setPreviewFileName] = useState("");
@@ -25,16 +26,6 @@ function App() {
 
   const [documents, setDocuments] = useState([]);
 
-  const handleRename = (index) => {
-    setConversations((prev) => {
-      const updated = [...prev];
-      updated[index].name = renameText.trim() || updated[index].name;
-      return updated;
-    });
-    setEditingIndex(null);
-    setRenameText("");
-  };
-
   function formatMarkdown(text) {
     return text.replace(
       /\*\*(.*?)\*\*/g,
@@ -42,19 +33,43 @@ function App() {
     );
   }
 
-  // Auto-scroll to bottom when new messages are added
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
+    async function loadData() {
+      try {
+        // fetch chats
+        const chatsRes = await fetch("http://localhost:5000/api/chats");
+        const savedChats = await chatsRes.json();
+        setConversations(
+          savedChats.map((chat) => ({
+            name: chat.title,
+            messages: chat.messages,
+          }))
+        );
+
+        // fetch documents
+        const docsRes = await fetch("http://localhost:5000/documents");
+        const savedDocs = await docsRes.json();
+        setDocuments(savedDocs);
+      } catch (error) {
+        console.error("Failed to load saved data:", error);
+      }
+    }
+
+    loadData();
+  }, []);
+
+  useEffect(() => {
     scrollToBottom();
-  }, [chat]);
+  }, [currentChat]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setMenuOpenIndex(null); // 🔒 Close the menu
+        setMenuOpenIndex(null);
       }
     };
 
@@ -77,9 +92,8 @@ function App() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
-      let resultText = ""; // ✅ DECLARE IT HERE
+      let resultText = "";
 
-      // Add an empty AI message first
       setCurrentChat((prev) => [...prev, { type: "ai", text: "" }]);
 
       while (true) {
@@ -131,11 +145,6 @@ function App() {
       setFile(null);
       setPreviewFileName("");
 
-      setDocuments((prev) => [
-        { name: currentFileName, uploadedAt: new Date() },
-        ...prev,
-      ]);
-
       setCurrentChat((prev) => [
         ...prev,
         { type: "user", text: `📄 Sent a file: ${currentFileName}` },
@@ -149,7 +158,7 @@ function App() {
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
-        let resultText = ""; // ✅ DECLARED HERE TOO
+        let resultText = "";
 
         setCurrentChat((prev) => [...prev, { type: "ai", text: "" }]);
 
@@ -163,6 +172,11 @@ function App() {
           for (const line of lines) {
             if (line === "data: [DONE]") {
               setIsLoading(false);
+
+              const docsRes = await fetch("http://localhost:5000/documents");
+              const savedDocs = await docsRes.json();
+              setDocuments(savedDocs);
+
               return;
             }
 
@@ -186,8 +200,7 @@ function App() {
     }
 
     if (hasQuestion) {
-      const userMsg = { type: "user", text: question };
-      setCurrentChat((prev) => [...prev, userMsg]);
+      setCurrentChat((prev) => [...prev, { type: "user", text: question }]);
       const q = question;
       setQuestion("");
 
@@ -199,6 +212,16 @@ function App() {
         setIsLoading(false);
       }
     }
+  };
+
+  const handleRename = (index) => {
+    setConversations((prev) => {
+      const updated = [...prev];
+      updated[index].name = renameText.trim() || updated[index].name;
+      return updated;
+    });
+    setEditingIndex(null);
+    setRenameText("");
   };
 
   return (
@@ -238,7 +261,7 @@ function App() {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
-                            messages: currentChat.slice(0, 4), // Only first few messages
+                            messages: currentChat.slice(0, 4),
                           }),
                         }
                       );
@@ -254,6 +277,15 @@ function App() {
                         },
                         ...prev,
                       ]);
+
+                      await fetch("http://localhost:5000/api/save-chat", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          title: generatedTitle,
+                          messages: currentChat,
+                        }),
+                      });
                     } catch (error) {
                       console.error("Title generation failed:", error);
                       setConversations((prev) => [
@@ -271,6 +303,32 @@ function App() {
               >
                 New Chat
               </div>
+
+              <div
+                ref={documentsBtnRef}
+                className={styles.navItemActive}
+                style={{
+                  marginBottom: "1rem",
+                  background: isDocumentsOpen ? "#2563eb" : undefined,
+                }}
+                onClick={() => setIsDocumentsOpen((prev) => !prev)}
+              >
+                📁 Documents
+              </div>
+
+              {isDocumentsOpen && (
+                <div ref={documentsPopupRef} className={styles.documentsPopup}>
+                  {documents.length === 0 ? (
+                    <div className={styles.navItem}>No files uploaded</div>
+                  ) : (
+                    documents.map((doc, idx) => (
+                      <div key={idx} className={styles.navItem}>
+                        📄 {doc.name}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
 
               <div className={styles.navItemTitle}>Past Conversations</div>
               {conversations.map((conv, index) => (
@@ -344,19 +402,7 @@ function App() {
                   )}
                 </div>
               ))}
-
-              <div className={styles.navItemTitle}>📁 Documents</div>
-              {documents.length === 0 ? (
-                <div className={styles.navItem}>No files uploaded</div>
-              ) : (
-                documents.map((doc, idx) => (
-                  <div key={idx} className={styles.navItem}>
-                    📄 {doc.name}
-                  </div>
-                ))
-              )}
             </div>
-            {/* <button className={styles.uploadBtn}>⬆️ Upload Documents</button> */}
           </div>
         )}
       </div>
@@ -376,7 +422,7 @@ function App() {
         {/* Chat Messages - Scrollable Area */}
         <div className={styles.chatMessagesContainer}>
           <div className={styles.chatMessages}>
-            {chat.map((msg, i) => (
+            {currentChat.map((msg, i) => (
               <div
                 key={i}
                 className={
@@ -388,15 +434,6 @@ function App() {
                 />
               </div>
             ))}
-            {/* {isLoading && (
-              <div className={styles.aiBubble}>
-                <div className={styles.loadingDots}>
-                  <div className={styles.dot}></div>
-                  <div className={styles.dot}></div>
-                  <div className={styles.dot}></div>
-                </div>
-              </div>
-            )} */}
 
             {/* Invisible element to scroll to */}
             <div ref={messagesEndRef} />

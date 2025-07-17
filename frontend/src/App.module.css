@@ -413,6 +413,15 @@ body {
   width: 100%;
 }
 
+.chatRow span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px; /* You can adjust as appropriate */
+  display: inline-block;
+  vertical-align: middle;
+}
+
 .menuIcon {
   font-size: 18px;
   cursor: pointer;
