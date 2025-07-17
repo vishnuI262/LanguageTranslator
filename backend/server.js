@@ -13,6 +13,7 @@ dotenv.config();
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 const upload = multer({ dest: "uploads/" });
 
@@ -27,23 +28,30 @@ app.get("/", (req, res) => {
 let uploadedKnowledge = "";
 
 app.post("/upload", upload.single("file"), async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
   try {
     const file = req.file;
-    if (!file) return res.status(400).json({ error: "No file uploaded!" });
+    if (!file) {
+      res.write("data: [ERROR] No file uploaded!\n\n");
+      return res.end();
+    }
 
     console.log("--Uploaded file:", file.originalname);
     console.log("--MIME type:", file.mimetype);
 
     let extractedText = "";
 
+    // 🧠 Handle PDF, image, or text file
     if (file.mimetype === "application/pdf") {
       const dataBuffer = fs.readFileSync(file.path);
       const parsed = await pdfParse(dataBuffer);
       extractedText = parsed.text.trim();
 
       if (extractedText.length < 50) {
-        console.log("--Not enough text from PDF, switching to OCR...");
-
+        console.log("--Fallback to OCR...");
         const convert = fromPath(file.path, {
           density: 300,
           saveFilename: "page",
@@ -56,7 +64,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
         for (const image of images) {
           const processedImagePath = `./tempImages/processed_${image}`;
-
           await sharp(`./tempImages/${image}`)
             .resize(1600)
             .grayscale()
@@ -72,11 +79,9 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
           extractedText += text + "\n";
         }
-      } else {
-        console.log("Extracted text from PDF:", extractedText.slice(0, 500));
       }
     } else if (file.mimetype.startsWith("image/")) {
-      console.log("--Running Tesseract OCR for image...");
+      console.log("--Tesseract OCR for image...");
       const processedImagePath = `uploads/processed_${file.filename}.png`;
 
       await sharp(file.path)
@@ -93,19 +98,21 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       });
 
       extractedText = text;
-      console.log("--Extracted text from image:", extractedText.slice(0, 500));
     } else if (file.mimetype === "text/plain") {
       extractedText = fs.readFileSync(file.path, "utf-8");
     } else {
-      return res.status(400).json({ error: "Unsupported file type!" });
+      res.write("data: [ERROR] Unsupported file type!\n\n");
+      return res.end();
     }
 
     const safeText = extractedText.slice(0, 4000);
+    uploadedKnowledge = ""; // reset before building
 
-    console.log("--Sending text to OpenAI for translation...");
+    console.log("--Starting streaming translation...");
 
-    const completion = await openai.chat.completions.create({
+    const stream = await openai.chat.completions.create({
       model: "gpt-4o",
+      stream: true,
       messages: [
         { role: "system", content: "You are a professional translator." },
         {
@@ -115,19 +122,20 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       ],
     });
 
-    const translated = completion.choices[0].message.content;
-    console.log("--Translation successful!");
-    console.log("--Translated Preview:", translated.slice(0, 500));
+    for await (const chunk of stream) {
+      const content = chunk.choices?.[0]?.delta?.content;
+      if (content) {
+        uploadedKnowledge += content;
+        res.write(`data: ${content}\n\n`);
+      }
+    }
 
-    uploadedKnowledge = translated;
-
-    res.json({
-      original: extractedText,
-      translated: translated,
-    });
+    res.write("data: [DONE]\n\n");
+    res.end();
   } catch (error) {
-    console.error("--Error in /upload route:", error);
-    res.status(500).json({ error: "Translation failed!" });
+    console.error("--Error in streaming /upload:", error);
+    res.write("data: [ERROR] Translation failed!\n\n");
+    res.end();
   }
 });
 
@@ -142,6 +150,7 @@ app.post("/ask", express.json(), async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
+      stream: true,
       messages: [
         {
           role: "system",
@@ -159,6 +168,75 @@ app.post("/ask", express.json(), async (req, res) => {
   } catch (error) {
     console.error("--Error in /ask route:", error);
     res.status(500).json({ error: "Question answering failed!" });
+  }
+});
+
+app.post("/ask-stream", express.json(), async (req, res) => {
+  const { question } = req.body;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  try {
+    const stream = await openai.chat.completions.create({
+      model: "gpt-4o",
+      stream: true,
+      messages: [
+        { role: "system", content: "You're a helpful assistant..." },
+        { role: "user", content: `Document: ${uploadedKnowledge}` },
+        { role: "user", content: `Question: ${question}` },
+      ],
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices?.[0]?.delta?.content;
+      if (content) {
+        res.write(`data: ${content}\n\n`);
+      }
+    }
+    res.write("data: [DONE]\n\n");
+    res.end();
+  } catch (err) {
+    console.error("Streaming error:", err);
+    res.write("data: [ERROR]\n\n");
+    res.end();
+  }
+});
+
+// Example: Express.js route
+
+app.post("/generate-title", async (req, res) => {
+  if (!req.body || !Array.isArray(req.body.messages)) {
+    return res.status(400).json({ error: "Invalid or missing messages array" });
+  }
+
+  const { messages } = req.body;
+
+  const prompt = `
+    Based on the following conversation messages, generate a short and clear chat title in 5 words or less.
+
+    Messages:
+    ${messages
+      .map((m) => `${m.type === "user" ? "User" : "AI"}: ${m.text}`)
+      .join("\n")}
+
+    Title:
+  `;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const title =
+      response.choices?.[0]?.message?.content?.trim().replace(/^"|"$/g, "") ||
+      "Untitled Chat";
+    res.json({ title });
+  } catch (err) {
+    console.error("Title generation failed:", err);
+    res.status(500).json({ error: "Failed to generate title" });
   }
 });
 
