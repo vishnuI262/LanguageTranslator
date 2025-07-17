@@ -313,7 +313,7 @@ function App() {
                 }}
                 onClick={() => setIsDocumentsOpen((prev) => !prev)}
               >
-                📁 Documents
+                Documents
               </div>
 
               {isDocumentsOpen && (
@@ -357,7 +357,7 @@ function App() {
                           setCurrentChat(conversations[index].messages);
                         }}
                       >
-                        • {conv.name}
+                         {conv.name}
                       </span>
 
                       {hoverIndex === index && (
@@ -386,7 +386,7 @@ function App() {
                           setMenuOpenIndex(null);
                         }}
                       >
-                        ✏️ Rename
+                        Rename
                       </div>
                       <div
                         onClick={() => {
@@ -396,7 +396,7 @@ function App() {
                           setMenuOpenIndex(null);
                         }}
                       >
-                        🗑️ Delete
+                        Delete
                       </div>
                     </div>
                   )}
