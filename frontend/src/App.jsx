@@ -309,7 +309,7 @@ function App() {
                 className={styles.navItemActive}
                 style={{
                   marginBottom: "1rem",
-                  background: isDocumentsOpen ? "#2563eb" : undefined,
+                  background: isDocumentsOpen ? "#407af6" : undefined,
                 }}
                 onClick={() => setIsDocumentsOpen((prev) => !prev)}
               >
